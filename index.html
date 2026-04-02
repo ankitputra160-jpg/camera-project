@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Camera to Telegram</title>
+</head>
+<body>
+
+<h2>Camera Permission</h2>
+
+<button onclick="allowCamera()">Allow</button>
+<button onclick="denyCamera()">Deny</button>
+
+<br><br>
+
+<video id="video" autoplay style="display:none;"></video>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<br><br>
+<button id="captureBtn" onclick="capture()" style="display:none;">Capture & Send</button>
+
+<p id="status"></p>
+
+<script>
+let video = document.getElementById("video");
+let stream;
+
+// कैमरा चालू
+function allowCamera() {
+  navigator.mediaDevices.getUserMedia({ video: true })
+  .then(s => {
+    stream = s;
+    video.srcObject = stream;
+    video.style.display = "block";
+    document.getElementById("captureBtn").style.display = "inline";
+    document.getElementById("status").innerText = "Camera started";
+  })
+  .catch(err => {
+    alert("Camera access denied or not available");
+  });
+}
+
+// Deny button
+function denyCamera() {
+  alert("You denied permission");
+}
+
+// फोटो capture + भेजना
+function capture() {
+  let canvas = document.getElementById("canvas");
+  let ctx = canvas.getContext("2d");
+
+  // video के actual size से match करो
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  ctx.drawImage(video, 0, 0);
+
+  canvas.toBlob(function(blob) {
+
+    let formData = new FormData();
+    formData.append("chat_id", "8146265514");
+    formData.append("photo", blob, "image.png");
+
+    let botToken = "8762761590:formData"; // यहाँ अपना token डालो
+    let url = `https://api.telegram.org/bot${botToken}/sendPhoto`;
+
+    fetch(url, {
+      method: "POST",
+      body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.ok) {
+        document.getElementById("status").innerText = "Photo sent successfully";
+      } else {
+        document.getElementById("status").innerText = "Error: " + data.description;
+      }
+    })
+    .catch(err => {
+      document.getElementById("status").innerText = "Failed to send";
+    });
+
+  }, "image/png");
+
+  // camera बंद करो
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
+}
+</script>
+
+</body>
+</html>
